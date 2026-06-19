@@ -1,3 +1,8 @@
+* Fri Jun 19 2026 Thorsten Leemhuis <fedora@leemhuis.info> [7.1.1-55.vanilla]
+- import ark-infra from kvc-infra-stable-7.1 (84399ddda97) (Thorsten Leemhuis)
+- Linux v7.1.1
+Resolves: 
+
 * Tue Jun 16 2026 Fedora Kernel Team <kernel-team@fedoraproject.org> [7.1.0-55]
 - Fix up rebase issues with rng.c (Justin M. Forbes)
 - fedora: cleanup the Cadence USB options (Peter Robinson)
