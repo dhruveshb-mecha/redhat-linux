@@ -1,0 +1,93 @@
+name: Build and Release Kernel (RPM)
+
+on:
+  push:
+    branches: ["kvc-vanilla-stable-7.1"]
+  pull_request:
+    branches: ["kvc-vanilla-stable-7.1"]
+  workflow_dispatch:
+
+env:
+  # Matches the DIST tag .copr/Makefile uses for this tree.
+  DIST: ".fc44"
+
+jobs:
+  build-rpm:
+    runs-on: ubuntu-24.04-arm
+
+    permissions:
+      contents: write
+
+    container:
+      image: fedora:44
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install base tooling
+        run: |
+          dnf install -y git make gcc flex bison bzip2 dwarves xz rpm-build python3-pyyaml rust rust-src bindgen rustfmt dnf-plugins-core gh
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "fedora@leemhuis.info"
+          git config --global user.name "Thorsten Leemhuis"
+          git config --global --add safe.directory '*'
+
+      - name: Ensure full git history
+        run: .copr/deepen_gittree.sh
+
+      - name: Generate spec file
+        run: make NO_CONFIGCHECKS=1 DIST="${{ env.DIST }}" UPSTREAMBUILD_GIT_ONLY=0 dist-spec
+
+      - name: Install kernel build dependencies
+        run: dnf builddep -y redhat/rpm/SOURCES/kernel.spec
+
+      - name: Build SRPM + binary RPMs
+        run: make NO_CONFIGCHECKS=1 DIST="${{ env.DIST }}" UPSTREAMBUILD_GIT_ONLY=0 dist-all-rpms
+
+      - name: Consolidate Artifacts
+        if: always()
+        run: |
+          mkdir -p dist
+          find redhat/rpm/RPMS -name "*.rpm" -exec cp {} dist/ \;
+          find redhat/rpm/SRPMS -name "*.rpm" -exec cp {} dist/ \;
+
+      - name: Upload RPM Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-packages-rpm
+          path: ./dist/*.rpm
+
+  release-rpm:
+    if: github.event_name != 'pull_request'
+    needs: build-rpm
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download RPM Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: kernel-packages-rpm
+          path: ./dist
+
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gh
+
+      - name: Create/Update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          tag="kernel-build-${{ github.run_number }}"
+          gh release create "$tag" ./dist/*.rpm \
+            --title "Kernel RPM build ${{ github.run_number }}" \
+            --notes "Automated kernel RPM build from ${{ github.sha }}"
