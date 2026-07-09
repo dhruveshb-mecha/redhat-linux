@@ -22,14 +22,19 @@ jobs:
       image: fedora:44
 
     steps:
+      # git must be installed BEFORE actions/checkout runs: if it isn't
+      # already in PATH, checkout silently falls back to downloading a
+      # tarball via the GitHub REST API instead of doing a real `git
+      # clone`, leaving no .git directory at all (surfaces later as
+      # "fatal: not a git repository" on every git command).
+      - name: Install base tooling
+        run: |
+          dnf install -y git make gcc flex bison bzip2 dwarves xz rpm-build python3-pyyaml rust rust-src bindgen rustfmt dnf-plugins-core gh
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Install base tooling
-        run: |
-          dnf install -y git make gcc flex bison bzip2 dwarves xz rpm-build python3-pyyaml rust rust-src bindgen rustfmt dnf-plugins-core gh
 
       - name: Configure Git
         run: |
@@ -59,8 +64,6 @@ jobs:
         run: dnf builddep -y redhat/rpm/SOURCES/kernel.spec
 
       - name: Build SRPM + binary RPMs
-        env:
-          GIT_DISCOVERY_ACROSS_FILESYSTEM: "1"
         run: make NO_CONFIGCHECKS=1 DIST="${{ env.DIST }}" UPSTREAMBUILD_GIT_ONLY=0 dist-all-rpms
 
       - name: Consolidate Artifacts
