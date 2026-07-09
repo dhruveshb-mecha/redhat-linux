@@ -40,13 +40,27 @@ jobs:
       - name: Ensure full git history
         run: .copr/deepen_gittree.sh
 
+      - name: Fetch upstream tracking branch used for versioning
+        # redhat/Makefile.variables pins UPSTREAM_BRANCH to
+        # arkify-upstream-stable-7.1, which only exists on the upstream
+        # gitlab.com/knurd42/linux tree, not on this GitHub origin. The
+        # version/changelog logic in redhat/Makefile needs it to resolve
+        # locally (as either origin/<branch> or a plain local branch).
+        run: |
+          upstream_branch=$(sed -n 's/^UPSTREAM_BRANCH ?= *//p' redhat/Makefile.variables | head -n1)
+          git fetch https://gitlab.com/knurd42/linux.git "$upstream_branch:$upstream_branch"
+
       - name: Generate spec file
+        env:
+          GIT_DISCOVERY_ACROSS_FILESYSTEM: "1"
         run: make NO_CONFIGCHECKS=1 DIST="${{ env.DIST }}" UPSTREAMBUILD_GIT_ONLY=0 dist-spec
 
       - name: Install kernel build dependencies
         run: dnf builddep -y redhat/rpm/SOURCES/kernel.spec
 
       - name: Build SRPM + binary RPMs
+        env:
+          GIT_DISCOVERY_ACROSS_FILESYSTEM: "1"
         run: make NO_CONFIGCHECKS=1 DIST="${{ env.DIST }}" UPSTREAMBUILD_GIT_ONLY=0 dist-all-rpms
 
       - name: Consolidate Artifacts
